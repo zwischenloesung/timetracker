@@ -1,7 +1,8 @@
 #!/bin/bash -e
 ########################################################################
-#** Version: 1.0
+#** Version: 2.0
 #* This script helps recording accomplished tasks and the time used.
+#* Works with the new https://github.com/inofix/ch-inofix-timetracker
 #
 ########################################################################
 # author/copyright: <mic@inofix.ch>
@@ -24,8 +25,10 @@ needsroot=1
 
 ttfile=~/.tt
 
-xmlBodyTag="taskRecords"
-xmlRecordTag="ch.inofix.portlet.timetracker.model.impl.TaskRecordImpl"
+xmlBodyTag="TaskRecords"
+xmlRecordTag="ch.inofix.timetracker.model.impl.TaskRecordImpl"
+start_date_string="fromDate"
+end_date_string="untilDate"
 
 # pattern in input file where processing should end
 stop_processing="^####"
@@ -83,6 +86,13 @@ print_help()
 print_version()
 {
     $_grep "^#\*\* " $0 | $_sed 's;^#\*\*;;'
+}
+
+warnings=0
+warn()
+{
+    let ++warnings
+    printf "\e[1;33m$@\n"
 }
 
 die()
@@ -209,7 +219,7 @@ format_date()
 
 test_date()
 {
-    [ $1 -lt $2 ] || error "start date was greater than end date"
+    [ $1 -lt $2 ] || warn "start date was greater than end date"
     for d in $1 $2 ; do
         m=$($_date -d "@$d" +%M)
         case $m in
@@ -252,8 +262,8 @@ export_xml()
 $tagBase/__workPackage=$workpackage
 $tagBase/__description=$description
 $tagBase/__ticketURL=$ticketURL
-$tagBase/__startDate=$startDate
-$tagBase/__endDate=$endDate
+$tagBase/__$start_date_string=$startDate
+$tagBase/__$end_date_string=$endDate
 $tagBase/__status=$status"
     if [ $dryrun -eq 0 ] ; then
         printf "\e[1;39mThis is what we would feed 2xml:\e[0;39m\n"
@@ -328,6 +338,13 @@ while true ; do
         -n|--dry-run)
             dryrun=0
         ;;
+#*      -o |--old-format                    export for the old-style portlet
+        -o|--old)
+            xmlBodyTag="taskRecords"
+            xmlRecordTag="ch.inofix.portlet.timetracker.model.impl.TaskRecordImpl"
+            start_date_string="startDate"
+            end_date_string="endDate"
+        ;;
 #*      -v |--version
         -v|--version)
             print_version
@@ -378,6 +395,11 @@ case $actionmode in
         process_records export_xml
         if [ "${_pre:0:4}" != "echo" ] ; then
             printf "\e[1;32mLooks good, now writing ${ttfile}.xml\e[0;39m\n"
+            if [ $warnings -eq 1 ] ; then
+                printf "\e[1;33mNOTE: There was $warnings warning registered.\n"
+            elif [ $warnings -gt 1 ] ; then
+                printf "\e[1;33mNOTE: There were $warnings warnings registered.\n"
+            fi
             $_2xml > "${ttfile}.xml" < "$tempfile"
             $_rm "$tempfile"
         fi
